@@ -1,0 +1,121 @@
+import { describe, expect, it } from "vitest";
+import { calculerCibles } from "../calculs";
+import { genererMenu } from "../generation";
+import { estErreur, type Profil } from "../types";
+import { ALLERGENES } from "../filtrage";
+import { RECETTES } from "../data/recettes";
+import { COLLATIONS } from "../data/collations";
+
+const DEMO: Profil = {
+  age: 44, sexe: "F", lb: 150, pi: 5, po: 6,
+  act: "sedentaire", freq: 4, duree: 40, marche: 30,
+  objectif: "perte", rythme: 0.75, regime: "vegetarien",
+  allergies: [], collations: 2, medical: false,
+};
+
+describe("genererMenu", () => {
+  const cibles = calculerCibles(DEMO);
+
+  it("produit 7 jours de 3 repas + collations ≤ paramètre", () => {
+    const m = genererMenu(DEMO, cibles, 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    expect(m.jours).toHaveLength(7);
+    m.jours.forEach((j) => {
+      expect(j.repas).toHaveLength(3);
+      expect(j.snacks.length).toBeLessThanOrEqual(DEMO.collations);
+    });
+  });
+
+  it("reste proche de la cible calorique (±15 % chaque jour)", () => {
+    const m = genererMenu(DEMO, cibles, 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    m.jours.forEach((j) => {
+      expect(Math.abs(j.k - cibles.kcal) / cibles.kcal).toBeLessThan(0.15);
+    });
+  });
+
+  it("est déterministe : même seed → même menu", () => {
+    const a = genererMenu(DEMO, cibles, 42);
+    const b = genererMenu(DEMO, cibles, 42);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it("varie avec la seed (régénération)", () => {
+    const ids = new Set(
+      [1, 2, 3, 4, 5].map((s) => JSON.stringify(Object.keys((genererMenu(DEMO, cibles, s) as any).compte).sort()))
+    );
+    expect(ids.size).toBeGreaterThan(1);
+  });
+
+  it("n'inclut jamais un allergène déclaré dans le menu généré", () => {
+    const pr: Profil = { ...DEMO, allergies: ["sesame"] };
+    const m = genererMenu(pr, calculerCibles(pr), 3);
+    if (estErreur(m)) throw new Error(m.erreur);
+    const noms = Object.keys(m.compte).flatMap((id) => {
+      const r = RECETTES.find((x) => x.id === id) ?? COLLATIONS.find((x) => x.id === id);
+      return r ? r.ing.map(([n]) => n.toLowerCase()) : [];
+    });
+    ALLERGENES.sesame.forEach((kw) => expect(noms.some((n) => n.includes(kw))).toBe(false));
+  });
+
+  it("retourne une erreur honnête quand les contraintes vident la banque", () => {
+    const pr: Profil = { ...DEMO, regime: "vegetalien", allergies: ["soya"] };
+    const m = genererMenu(pr, calculerCibles(pr), 1);
+    expect(estErreur(m)).toBe(true);
+  });
+});
+
+describe("cohérence menu ↔ meal prep", () => {
+  it("aucun repas servi avant son jour de cuisson (dimanche < lun, mercredi ≤ mer, vendredi ≤ sam)", async () => {
+    const { planPrep } = await import("../prep");
+    const interdits = { dimanche: [] as string[], mercredi: ["lun", "mar"], vendredi: ["lun", "mar", "mer", "jeu"] };
+    for (const regime of ["vegetarien", "vegetalien"] as const) {
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const pr: Profil = { ...DEMO, regime };
+        const m = genererMenu(pr, calculerCibles(pr), seed);
+        if (estErreur(m)) throw new Error(m.erreur);
+        const { blocs } = planPrep(m);
+        (Object.keys(blocs) as (keyof typeof blocs)[]).forEach((b) =>
+          blocs[b].forEach((t) =>
+            t.jours.forEach((j) => expect(interdits[b], `${t.r.nom} (${b})`).not.toContain(j))
+          )
+        );
+      }
+    }
+  });
+
+  it("les recettes « fraîches » ne sont jamais servies en début de semaine", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const m = genererMenu(DEMO, calculerCibles(DEMO), seed);
+      if (estErreur(m)) throw new Error(m.erreur);
+      m.jours.slice(0, 2).forEach((j) =>
+        j.repas.forEach((r) => expect(r.r.moment).not.toBe("frais"))
+      );
+    }
+  });
+});
+
+describe("adaptation aux profils (portions à l'échelle)", () => {
+  it("un homme en prise de masse (~3000 kcal) reçoit des portions ×2 et un menu proche de SA cible", () => {
+    const pr: Profil = { ...DEMO, sexe: "H", age: 30, lb: 190, pi: 5, po: 11, freq: 5, objectif: "masse", regime: "vegetarien" };
+    const c = calculerCibles(pr);
+    expect(c.kcal).toBeGreaterThan(2700);
+    const m = genererMenu(pr, c, 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    expect(m.portionsRepas).toBeGreaterThan(1.5);
+    m.jours.forEach((j) => expect(Math.abs(j.k - c.kcal) / c.kcal).toBeLessThan(0.15));
+  });
+
+  it("une petite personne en perte reçoit des portions réduites (≤ 1)", () => {
+    const pr: Profil = { ...DEMO, lb: 110, pi: 5, po: 1, freq: 1, marche: 0, rythme: 1 };
+    const m = genererMenu(pr, calculerCibles(pr), 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    expect(m.portionsRepas).toBeLessThanOrEqual(1);
+  });
+
+  it("le profil démo reste à ×1 (banque calibrée sur ~1650 kcal)", () => {
+    const m = genererMenu(DEMO, calculerCibles(DEMO), 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    expect(m.portionsRepas).toBe(1);
+  });
+});
