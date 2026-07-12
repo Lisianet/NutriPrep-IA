@@ -2,7 +2,14 @@ import { supabase } from "./supabase";
 import type { Recette, Cat, MomentPrep, TypeRepas } from "../engine/types";
 
 /** Charge toutes les recettes depuis Supabase et les remet dans le format
- *  attendu par le moteur (identique à src/engine/data/recettes.ts). */
+ *  attendu par le moteur (identique à src/engine/data/recettes.ts).
+ *
+ *  Important : les colonnes Postgres de type "numeric" (kcal_portion,
+ *  prot_portion, gluc_portion, lip_portion, fibres_portion, quantite) sont
+ *  renvoyées par Supabase sous forme de TEXTE (ex. "390" au lieu de 390).
+ *  On les convertit explicitement avec Number(...) pour éviter que les
+ *  additions du moteur (ex. "10" + "20") ne fassent de la concaténation
+ *  de texte au lieu d'un calcul numérique. */
 export async function chargerRecettes(): Promise<Recette[]> {
   const { data, error } = await supabase
     .from("recipes")
@@ -22,21 +29,21 @@ export async function chargerRecettes(): Promise<Recette[]> {
     nom: r.nom,
     type: r.type_repas as TypeRepas,
     regimes: r.regimes_compatibles as Recette["regimes"],
-    k: r.kcal_portion ?? 0,
-    p: r.prot_portion ?? 0,
-    fb: r.fibres_portion ?? 0,
-    gl: r.gluc_portion ?? 0,
-    lp: r.lip_portion ?? 0,
-    micro: r.score_microbiote ?? 0,
-    prep: r.temps_prep_min ?? 0,
-    cuis: r.temps_cuisson_min ?? 0,
-    cons: r.conservation_frigo_jours ?? 4,
+    k: Number(r.kcal_portion ?? 0),
+    p: Number(r.prot_portion ?? 0),
+    fb: Number(r.fibres_portion ?? 0),
+    gl: Number(r.gluc_portion ?? 0),
+    lp: Number(r.lip_portion ?? 0),
+    micro: Number(r.score_microbiote ?? 0),
+    prep: Number(r.temps_prep_min ?? 0),
+    cuis: Number(r.temps_cuisson_min ?? 0),
+    cons: Number(r.conservation_frigo_jours ?? 4),
     cong: r.congelable ?? false,
     moment: r.moment_prep as MomentPrep,
     tags: (r.tags as string[]) ?? [],
     ing: (r.recipe_ingredients as any[]).map((ri) => [
       ri.ingredients.nom_fr,
-      ri.quantite,
+      Number(ri.quantite),
       ri.unite,
       ri.ingredients.categorie as Cat,
     ]),
