@@ -1,4 +1,4 @@
-import type { MenuGenere, Recette } from "./types";
+import type { Collation, MenuGenere, Recette } from "./types";
 import { RECETTES } from "./data/recettes";
 import { COLLATIONS } from "./data/collations";
 
@@ -53,18 +53,25 @@ export function planPrep(
 }
 
 /** id de recette → jour de cuisson, pour afficher le badge « prép. » dans le menu. */
-export function jourPrepParRecette(menu: MenuGenere): Record<string, JourPrep> {
-  const { blocs } = planPrep(menu);
+export function jourPrepParRecette(
+  menu: MenuGenere,
+  recettes: Recette[] = RECETTES
+): Record<string, JourPrep> {
+  const { blocs } = planPrep(menu, recettes);
   const map: Record<string, JourPrep> = {};
   (Object.keys(blocs) as JourPrep[]).forEach((b) => blocs[b].forEach((t) => { map[t.r.id] = b; }));
   return map;
 }
 
 /** Nombre de végétaux distincts de la semaine (fruits, légumes, légumineuses, grains, noix). */
-export function vegetauxDistincts(menu: MenuGenere): number {
+export function vegetauxDistincts(
+  menu: MenuGenere,
+  recettes: Recette[] = RECETTES,
+  collations: Collation[] = COLLATIONS
+): number {
   const set = new Set<string>();
   Object.keys(menu.compte).forEach((id) => {
-    const r = RECETTES.find((x) => x.id === id) ?? COLLATIONS.find((x) => x.id === id);
+    const r = recettes.find((x) => x.id === id) ?? collations.find((x) => x.id === id);
     r?.ing.forEach(([nom, , , c]) => { if ("FLGNC".includes(c)) set.add(nom); });
   });
   return set.size;

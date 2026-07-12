@@ -235,10 +235,10 @@ function Questionnaire({ pr, setPr, valider }: { pr: Profil; setPr: (p: Profil) 
   );
 }
 
-function TableauDeBord({ cibles, menu, pr }: { cibles: Cibles; menu: MenuGenere; pr: Profil }) {
+function TableauDeBord({ cibles, menu, pr, recettes }: { cibles: Cibles; menu: MenuGenere; pr: Profil; recettes: Recette[] }) {
   const moyMicro = Math.round(menu.jours.reduce((s, j) => s + j.micro, 0) / 7);
-  const veg = vegetauxDistincts(menu);
-  const { blocs, duree } = planPrep(menu);
+  const veg = vegetauxDistincts(menu, recettes, COLLATIONS);
+  const { blocs, duree } = planPrep(menu, recettes);
   const totalPrep = duree(blocs.dimanche) + duree(blocs.mercredi) + duree(blocs.vendredi);
   const Stat = ({ n, u, lab }: { n: string | number; u: string; lab: string }) => (
     <Card pad={16} style={{ textAlign: "center" }}>
@@ -277,8 +277,8 @@ function TableauDeBord({ cibles, menu, pr }: { cibles: Cibles; menu: MenuGenere;
   );
 }
 
-function VueMenu({ menu, cibles, regenerer, ouvrir }: { menu: MenuGenere; cibles: Cibles; regenerer: () => void; ouvrir: (d: Detail) => void }) {
-  const prepDe = jourPrepParRecette(menu);
+function VueMenu({ menu, cibles, regenerer, ouvrir, recettes }: { menu: MenuGenere; cibles: Cibles; regenerer: () => void; ouvrir: (d: Detail) => void; recettes: Recette[] }) {
+  const prepDe = jourPrepParRecette(menu, recettes);
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
@@ -335,7 +335,7 @@ function VueMenu({ menu, cibles, regenerer, ouvrir }: { menu: MenuGenere; cibles
 /** Prend maintenant "recettes" en prop (chargées depuis Supabase) au lieu de
  *  l'import statique RECETTES. Les collations restent statiques pour l'instant. */
 function VueRecettes({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d: Detail) => void; recettes: Recette[] }) {
-  const prepDe = jourPrepParRecette(menu);
+  const prepDe = jourPrepParRecette(menu, recettes);
   const usage: Record<string, string[]> = {};
   const ABBR = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
   menu.jours.forEach((j, i) => j.repas.forEach((m) => (usage[m.r.id] ??= []).push(ABBR[i])));
@@ -379,8 +379,8 @@ function VueRecettes({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d:
   );
 }
 
-function VuePrep({ menu, ouvrir }: { menu: MenuGenere; ouvrir: (d: Detail) => void }) {
-  const { blocs, duree } = planPrep(menu);
+function VuePrep({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d: Detail) => void; recettes: Recette[] }) {
+  const { blocs, duree } = planPrep(menu, recettes);
   const Bloc = ({ titre, sousTitre, liste, tone }: { titre: string; sousTitre: string; liste: TachePrep[]; tone: "green" | "curcuma" | "berry" }) => !liste.length ? null : (
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
@@ -415,9 +415,9 @@ function VuePrep({ menu, ouvrir }: { menu: MenuGenere; ouvrir: (d: Detail) => vo
   );
 }
 
-function VueEpicerie({ menu }: { menu: MenuGenere }) {
+function VueEpicerie({ menu, recettes }: { menu: MenuGenere; recettes: Recette[] }) {
   const [coches, setCoches] = useState<Record<string, boolean>>({});
-  const parCat = listeEpicerie(menu);
+  const parCat = listeEpicerie(menu, recettes, COLLATIONS);
   const ordre: Cat[] = ["F", "L", "P", "G", "C", "N", "D", "S", "E"];
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -535,11 +535,11 @@ export default function App() {
                 <h2 style={{ fontFamily: FONT_D, fontSize: 28, margin: 0 }}>{ONGLETS.find((o) => o[0] === onglet)![1]}</h2>
                 <button onClick={() => setEcran("quiz")} style={{ all: "unset", cursor: "pointer", fontSize: 13, fontWeight: 600, color: T.greenDark, textDecoration: "underline" }}>Modifier le profil</button>
               </div>
-              {onglet === "dash" && <TableauDeBord cibles={cibles} menu={menu} pr={pr} />}
-              {onglet === "menu" && <VueMenu menu={menu} cibles={cibles} regenerer={() => setSeed(seed + 1)} ouvrir={ouvrir} />}
+              {onglet === "dash" && <TableauDeBord cibles={cibles} menu={menu} pr={pr} recettes={recettes} />}
+              {onglet === "menu" && <VueMenu menu={menu} cibles={cibles} regenerer={() => setSeed(seed + 1)} ouvrir={ouvrir} recettes={recettes} />}
               {onglet === "recettes" && <VueRecettes menu={menu} ouvrir={ouvrir} recettes={recettes} />}
-              {onglet === "prep" && <VuePrep menu={menu} ouvrir={ouvrir} />}
-              {onglet === "epicerie" && <VueEpicerie menu={menu} />}
+              {onglet === "prep" && <VuePrep menu={menu} ouvrir={ouvrir} recettes={recettes} />}
+              {onglet === "epicerie" && <VueEpicerie menu={menu} recettes={recettes} />}
             </>)}
       </main>
       {detail && <FicheRecette d={detail} portionsDefaut={!detail.collation && menu && !estErreur(menu) ? menu.portionsRepas : 1} onClose={() => setDetail(null)} />}
