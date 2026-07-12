@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  ALLERG_LABELS, CAT_NOMS, COLLATIONS, RECETTES,
+  ALLERG_LABELS, CAT_NOMS, COLLATIONS,
   calculerCibles, estErreur, genererMenu, jourPrepParRecette, listeEpicerie, planPrep, vegetauxDistincts,
   type Allergene, type Cat, type Cibles, type Collation, type JourPrep, type MenuGenere, type Profil, type Recette, type TachePrep,
 } from "./engine";
+import { chargerRecettes } from "./lib/chargerRecettes";
 
 const T = {
   bg: "#EDF3ED", ink: "#17271E", sub: "#5A6E60", card: "#FFFFFF",
@@ -331,12 +332,14 @@ function VueMenu({ menu, cibles, regenerer, ouvrir }: { menu: MenuGenere; cibles
   );
 }
 
-function VueRecettes({ menu, ouvrir }: { menu: MenuGenere; ouvrir: (d: Detail) => void }) {
+/** Prend maintenant "recettes" en prop (chargées depuis Supabase) au lieu de
+ *  l'import statique RECETTES. Les collations restent statiques pour l'instant. */
+function VueRecettes({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d: Detail) => void; recettes: Recette[] }) {
   const prepDe = jourPrepParRecette(menu);
   const usage: Record<string, string[]> = {};
   const ABBR = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
   menu.jours.forEach((j, i) => j.repas.forEach((m) => (usage[m.r.id] ??= []).push(ABBR[i])));
-  const semaine = Object.keys(usage).map((id) => RECETTES.find((r) => r.id === id)).filter((r): r is Recette => !!r);
+  const semaine = Object.keys(usage).map((id) => recettes.find((r) => r.id === id)).filter((r): r is Recette => !!r);
   const TYPES: [Recette["type"], string][] = [["dej", "Déjeuners"], ["din", "Dîners"], ["soup", "Soupers"]];
   const Ligne = ({ r, extra }: { r: Recette; extra?: ReactNode }) => (
     <Card pad={14}>
@@ -354,11 +357,11 @@ function VueRecettes({ menu, ouvrir }: { menu: MenuGenere; ouvrir: (d: Detail) =
       {semaine.map((r) => (
         <Ligne key={r.id} r={r} extra={<><PrepBadge b={prepDe[r.id]} /><Etiquette tone="berry">servi {usage[r.id].join(" · ")}</Etiquette></>} />
       ))}
-      <h3 style={{ fontFamily: FONT_D, fontSize: 20, margin: "14px 0 0" }}>Toute la banque ({RECETTES.length} recettes)</h3>
+      <h3 style={{ fontFamily: FONT_D, fontSize: 20, margin: "14px 0 0" }}>Toute la banque ({recettes.length} recettes)</h3>
       {TYPES.map(([t, titre]) => (
         <div key={t} style={{ display: "grid", gap: 8 }}>
           <strong style={{ fontSize: 13, color: T.greenDark, textTransform: "uppercase", letterSpacing: 1 }}>{titre}</strong>
-          {RECETTES.filter((r) => r.type === t).map((r) => <Ligne key={r.id} r={r} extra={r.regimes.includes("vegetalien") ? <Etiquette tone="green">végétalien ok</Etiquette> : undefined} />)}
+          {recettes.filter((r) => r.type === t).map((r) => <Ligne key={r.id} r={r} extra={r.regimes.includes("vegetalien") ? <Etiquette tone="green">végétalien ok</Etiquette> : undefined} />)}
         </div>
       ))}
       <div style={{ display: "grid", gap: 8 }}>
@@ -458,9 +461,43 @@ export default function App() {
   const [onglet, setOnglet] = useState<Onglet>("dash");
   const [detail, setDetail] = useState<Detail | null>(null);
 
+  // Recettes chargées depuis Supabase au démarrage (remplace l'ancien import statique).
+  const [recettes, setRecettes] = useState<Recette[] | null>(null);
+  const [erreurRecettes, setErreurRecettes] = useState<string | null>(null);
+
+  useEffect(() => {
+    chargerRecettes()
+      .then(setRecettes)
+      .catch((e: Error) => setErreurRecettes(e.message));
+  }, []);
+
   const cibles = useMemo(() => (pr.age && pr.lb ? calculerCibles(pr) : null), [pr]);
-  const menu = useMemo(() => (ecran === "plan" && cibles ? genererMenu(pr, cibles, seed) : null), [ecran, pr, cibles, seed]);
+  const menu = useMemo(
+    () => (ecran === "plan" && cibles && recettes ? genererMenu(pr, cibles, seed, recettes, COLLATIONS) : null),
+    [ecran, pr, cibles, seed, recettes]
+  );
   const ouvrir = (d: Detail) => setDetail(d);
+
+  // Écran de chargement / erreur pendant la récupération des recettes Supabase.
+  if (erreurRecettes) {
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, color: T.ink, fontFamily: FONT_B, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <Card style={{ maxWidth: 480, textAlign: "center" }}>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6 }}>Impossible de charger les recettes : {erreurRecettes}</p>
+          <p style={{ fontSize: 13, color: T.sub, margin: "8px 0 0" }}>
+            Vérifie la configuration Supabase (variables VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).
+          </p>
+        </Card>
+      </div>
+    );
+  }
+  if (!recettes) {
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, color: T.ink, fontFamily: FONT_B, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: 15, color: T.sub }}>Chargement des recettes…</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.ink, fontFamily: FONT_B }}>
@@ -500,7 +537,7 @@ export default function App() {
               </div>
               {onglet === "dash" && <TableauDeBord cibles={cibles} menu={menu} pr={pr} />}
               {onglet === "menu" && <VueMenu menu={menu} cibles={cibles} regenerer={() => setSeed(seed + 1)} ouvrir={ouvrir} />}
-              {onglet === "recettes" && <VueRecettes menu={menu} ouvrir={ouvrir} />}
+              {onglet === "recettes" && <VueRecettes menu={menu} ouvrir={ouvrir} recettes={recettes} />}
               {onglet === "prep" && <VuePrep menu={menu} ouvrir={ouvrir} />}
               {onglet === "epicerie" && <VueEpicerie menu={menu} />}
             </>)}
