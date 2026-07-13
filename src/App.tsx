@@ -75,8 +75,13 @@ function FicheRecette({ d, portionsDefaut, onClose }: { d: Detail; portionsDefau
   const [portions, setPortions] = useState(portionsDefaut);
   // v4 : les ingrédients indivisibles (œufs, tortillas, pains, fruits entiers...)
   // sont arrondis à l'unité entière (minimum 1) plutôt que divisés — jamais 1,25 œuf.
-  const fmt = (q: number, indivisible?: boolean) =>
-    fr(indivisible ? Math.max(1, Math.round(q * portions)) : q * portions);
+  // Les grammes et millilitres sont arrondis au gramme/ml près (pas de 3,4 g).
+  const fmt = (q: number, u: string, indivisible?: boolean) => {
+    const val = q * portions;
+    if (indivisible) return fr(Math.max(1, Math.round(val)));
+    if (u === "g" || u === "ml") return fr(Math.round(val));
+    return fr(val);
+  };
   const r = d.r;
   const recette = !d.collation ? (r as Recette) : null;
   return (
@@ -105,7 +110,7 @@ function FicheRecette({ d, portionsDefaut, onClose }: { d: Detail; portionsDefau
           <div>
             <strong style={{ fontSize: 13 }}>Ingrédients {portions !== 1 && <span style={{ color: T.sub, fontWeight: 500 }}>(×{fr(portions)})</span>}</strong>
             <ul style={{ margin: "8px 0 0", paddingLeft: 16, fontSize: 13.5, lineHeight: 1.9 }}>
-              {r.ing.map(([nom, q, u, , indiv]) => <li key={nom}>{fmt(q, indiv)} {u} — {nom}</li>)}
+              {r.ing.map(([nom, q, u, , indiv]) => <li key={nom}>{fmt(q, u, indiv)} {u} — {nom}</li>)}
             </ul>
           </div>
           {recette && (
