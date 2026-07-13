@@ -1,4 +1,18 @@
-import type { Cibles, Profil } from "./types";
+import type { Cibles, Micronutriments, Profil } from "./types";
+
+/** Apports nutritionnels de référence (RNI/AI, Santé Canada — valeurs adulte
+ *  usuelles selon l'âge/sexe). Sert de cible pour pondérer le choix des
+ *  recettes vers celles qui contribuent le plus aux besoins du profil. */
+export function calculerCiblesMicro(pr: Profil): Micronutriments {
+  const fer_mg = pr.sexe === "F" && pr.age < 51 ? 18 : 8;
+  const calcium_mg = pr.age >= 51 ? 1200 : 1000;
+  const zinc_mg = pr.sexe === "H" ? 11 : 8;
+  const b12_ug = 2.4;
+  const magnesium_mg = pr.sexe === "H" ? (pr.age <= 30 ? 400 : 420) : (pr.age <= 30 ? 310 : 320);
+  const potassium_mg = pr.sexe === "H" ? 3400 : 2600;
+  const omega3_g = pr.sexe === "H" ? 1.6 : 1.1;
+  return { fer_mg, calcium_mg, zinc_mg, b12_ug, magnesium_mg, potassium_mg, omega3_g };
+}
 
 /**
  * Cibles nutritionnelles à partir du profil.
@@ -40,5 +54,5 @@ export function calculerCibles(pr: Profil): Cibles {
   const fibres = Math.max(25, (kcal * 14) / 1000);
   const gluc = Math.max(0, (kcal - prot * 4 - lip * 9) / 4);
 
-  return { kg, cm, bmr, naf, tdee, kcal, prot, lip, gluc, fibres, objectif };
+  return { kg, cm, bmr, naf, tdee, kcal, prot, lip, gluc, fibres, objectif, micro: calculerCiblesMicro(pr) };
 }

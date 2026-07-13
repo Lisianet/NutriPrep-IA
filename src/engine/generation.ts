@@ -1,4 +1,4 @@
-import type { Cibles, Collation, JourMenu, MomentPrep, Profil, Recette, ResultatMenu, TypeRepas } from "./types";
+import type { Cibles, Collation, JourMenu, Micronutriments, MomentPrep, Profil, Recette, ResultatMenu, TypeRepas } from "./types";
 import { JOURS } from "./types";
 import { filtrer } from "./filtrage";
 import { RECETTES } from "./data/recettes";
@@ -33,17 +33,36 @@ function melangerPondere<T>(arr: T[], rand: () => number, poids: (t: T) => numbe
     .map((x) => x.t);
 }
 
-/** Score une recette selon sa densité en protéines et en fibres (par kcal)
- *  comparée à la densité visée par les cibles du profil. > 1 = plus dense que
- *  la cible, ce qui aide à combler les besoins sans se fier au seul facteur
- *  d'échelle des portions. */
+const NUTRIMENTS: (keyof Micronutriments)[] = [
+  "fer_mg", "calcium_mg", "zinc_mg", "b12_ug", "magnesium_mg", "potassium_mg", "omega3_g",
+];
+
+/** Score une recette selon sa densité en protéines/fibres ET en micronutriments
+ *  (par kcal) comparée à la densité visée par les cibles du profil. > 1 = plus
+ *  dense que la cible, ce qui aide à combler les besoins sans se fier au seul
+ *  facteur d'échelle des portions. Les micronutriments ne comptent que si la
+ *  recette en a (ex. banque statique locale sans ces données) ; sinon on se
+ *  rabat sur les macros seules. */
 function scoreRecette(r: Recette, cibles: Cibles): number {
   if (!r.k) return 1;
   const densProt = r.p / r.k;
   const densFibres = r.fb / r.k;
   const cibleDensProt = cibles.prot / cibles.kcal;
   const cibleDensFibres = cibles.fibres / cibles.kcal;
-  return 0.5 * (densProt / cibleDensProt) + 0.5 * (densFibres / cibleDensFibres);
+  const scoreMacros = 0.5 * (densProt / cibleDensProt) + 0.5 * (densFibres / cibleDensFibres);
+
+  if (!r.micronutriments) return scoreMacros;
+
+  const micro = r.micronutriments;
+  const termes = NUTRIMENTS.map((n) => {
+    const cibleDens = cibles.micro[n] / cibles.kcal;
+    if (!cibleDens) return null;
+    return (micro[n] / r.k) / cibleDens;
+  }).filter((v): v is number => v !== null);
+  if (!termes.length) return scoreMacros;
+  const scoreMicro = termes.reduce((s, v) => s + v, 0) / termes.length;
+
+  return 0.5 * scoreMacros + 0.5 * scoreMicro;
 }
 
 const PATRONS: Record<TypeRepas, number[]> = {
@@ -53,6 +72,54 @@ const PATRONS: Record<TypeRepas, number[]> = {
 };
 
 const RANG_MOMENT: Record<MomentPrep, number> = { dimanche: 0, misemaine: 1, frais: 2 };
+
+const idx = <T,>(arr: T[], i: number) => arr[Math.min(i, arr.length - 1)];
+
+/** Mots-clés d'ingrédients « dominants » : deux recettes qui en partagent un
+ *  se sentent redondantes le même jour (ex. lentilles au dîner ET au souper),
+ *  même si ce ne sont pas exactement les mêmes recettes. */
+const MOTS_SIGNATURE = [
+  "lentille", "pois chiche", "haricot", "tofu", "tempeh", "edamame",
+  "pain", "pâtes", "riz", "quinoa", "patate douce", "avocat", "orge", "couscous",
+  "saumon", "poulet", "boeuf", "porc", "dinde", "crevette", "thon",
+];
+
+function motsSignature(r: Recette): Set<string> {
+  const noms = r.ing.map(([n]) => n.toLowerCase());
+  return new Set(MOTS_SIGNATURE.filter((mot) => noms.some((n) => n.includes(mot))));
+}
+
+function partageSignature(a: Recette, b: Recette): boolean {
+  const sa = motsSignature(a);
+  for (const mot of motsSignature(b)) if (sa.has(mot)) return true;
+  return false;
+}
+
+/** Essaie d'échanger deux recettes de même moment de préparation (donc sans
+ *  jamais casser les contraintes de jour de cuisson) au sein de "din" ou de
+ *  "soup", pour réduire le nombre de jours où le dîner et le souper partagent
+ *  un ingrédient dominant. Meilleur effort seulement : avec une petite banque
+ *  filtrée, certains jours peuvent rester en collision. */
+function reparerRepetitions(din: Recette[], soup: Recette[]): void {
+  const jourAClash = (i: number) => partageSignature(idx(din, PATRONS.din[i]), idx(soup, PATRONS.soup[i]));
+  const compterClashes = () => JOURS.reduce((n, _j, i) => n + (jourAClash(i) ? 1 : 0), 0);
+
+  for (let essai = 0; essai < 20 && compterClashes() > 0; essai++) {
+    let ameliore = false;
+    for (const arr of [din, soup]) {
+      for (let a = 0; a < arr.length && !ameliore; a++) {
+        for (let b = a + 1; b < arr.length && !ameliore; b++) {
+          if (arr[a].moment !== arr[b].moment) continue;
+          const avant = compterClashes();
+          [arr[a], arr[b]] = [arr[b], arr[a]];
+          if (compterClashes() < avant) ameliore = true;
+          else [arr[a], arr[b]] = [arr[b], arr[a]];
+        }
+      }
+    }
+    if (!ameliore) break;
+  }
+}
 
 export function genererMenu(
   pr: Profil,
@@ -85,7 +152,7 @@ export function genererMenu(
     return { erreur: "Trop de recettes exclues par les contraintes — la banque MVP est encore petite. Retirez une contrainte ou élargissez la banque." };
   }
 
-  const idx = <T,>(arr: T[], i: number) => arr[Math.min(i, arr.length - 1)];
+  reparerRepetitions(din, soup);
 
   const baseJour = (i: number) =>
     idx(dej, PATRONS.dej[i]).k + idx(din, PATRONS.din[i]).k + idx(soup, PATRONS.soup[i]).k;

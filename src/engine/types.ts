@@ -69,6 +69,9 @@ export interface Cibles {
   bmr: number; naf: number; tdee: number;
   kcal: number; prot: number; lip: number; gluc: number; fibres: number;
   objectif: Profil["objectif"];
+  /** Apports de référence (RNI) en micronutriments selon l'âge/sexe du profil —
+   *  sert uniquement à pondérer le choix des recettes, jamais affiché tel quel. */
+  micro: Micronutriments;
 }
 export interface RepasJour { moment: string; r: Recette; }
 export interface JourMenu {
