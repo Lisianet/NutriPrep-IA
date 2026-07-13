@@ -14,16 +14,17 @@ import type { Recette, Cat, MomentPrep, TypeRepas } from "../engine/types";
  *  portions dans FicheRecette) et les micronutriments par portion, exposés
  *  en usage interne seulement — jamais affichés dans l'interface.
  *
- *  Important : recipe_ingredients.quantite est saisie pour la recette
- *  ENTIÈRE (le lot complet, ex. 4 bananes pour un smoothie qui donne
- *  4 portions), pas pour une seule portion. On divise donc chaque quantité
- *  par nb_portions pour obtenir la quantité par portion attendue par le
- *  moteur (cf. le commentaire du type Ingredient). */
+ *  Note : la table "recipes" n'a pas de colonne nb_portions — les quantités
+ *  de recipe_ingredients doivent donc être saisies directement PAR PORTION
+ *  à la source (pas pour un lot). Si une recette affiche des quantités trop
+ *  élevées (ex. 4 bananes pour 1 portion de smoothie), c'est une erreur de
+ *  saisie à corriger dans recipe_ingredients, pas quelque chose que ce
+ *  chargeur peut déduire automatiquement. */
 export async function chargerRecettes(): Promise<Recette[]> {
   const { data, error } = await supabase
     .from("recipes")
     .select(`
-      id, nom, type_repas, regimes_compatibles, nb_portions,
+      id, nom, type_repas, regimes_compatibles,
       temps_prep_min, temps_cuisson_min, conservation_frigo_jours, congelable,
       moment_prep, etapes, tags,
       kcal_portion, prot_portion, gluc_portion, lip_portion, fibres_portion, score_microbiote,
@@ -33,9 +34,7 @@ export async function chargerRecettes(): Promise<Recette[]> {
     `);
   if (error) throw new Error(`Impossible de charger les recettes depuis Supabase : ${error.message}`);
   if (!data) return [];
-  return data.map((r): Recette => {
-    const nbPortions = Number(r.nb_portions ?? 1) || 1;
-    return {
+  return data.map((r): Recette => ({
     id: String(r.id),
     nom: r.nom,
     type: r.type_repas as TypeRepas,
@@ -54,7 +53,7 @@ export async function chargerRecettes(): Promise<Recette[]> {
     tags: (r.tags as string[]) ?? [],
     ing: (r.recipe_ingredients as any[]).map((ri) => [
       ri.ingredients.nom_fr,
-      Number(ri.quantite) / nbPortions,
+      Number(ri.quantite),
       ri.unite,
       ri.ingredients.categorie as Cat,
       Boolean(ri.ingredients.indivisible),
@@ -69,6 +68,5 @@ export async function chargerRecettes(): Promise<Recette[]> {
       potassium_mg: Number(r.potassium_mg_portion ?? 0),
       omega3_g: Number(r.omega3_g_portion ?? 0),
     },
-  };
-  });
+  }));
 }
