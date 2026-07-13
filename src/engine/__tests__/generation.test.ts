@@ -26,11 +26,20 @@ describe("genererMenu", () => {
     });
   });
 
-  it("reste proche de la cible calorique (±15 % chaque jour)", () => {
+  it("sert le nombre de collations demandé chaque jour (pas seulement en moyenne)", () => {
+    const m = genererMenu(DEMO, cibles, 1);
+    if (estErreur(m)) throw new Error(m.erreur);
+    m.jours.forEach((j) => expect(j.snacks).toHaveLength(DEMO.collations));
+  });
+
+  it("reste proche de la cible calorique (±20 % chaque jour)", () => {
+    // Tolérance élargie vs l'ancienne version : le nombre de collations choisi
+    // par le profil est maintenant toujours respecté (cf. genererMenu), quitte
+    // à dépasser un peu la cible calorique les jours à repas plus lourds.
     const m = genererMenu(DEMO, cibles, 1);
     if (estErreur(m)) throw new Error(m.erreur);
     m.jours.forEach((j) => {
-      expect(Math.abs(j.k - cibles.kcal) / cibles.kcal).toBeLessThan(0.15);
+      expect(Math.abs(j.k - cibles.kcal) / cibles.kcal).toBeLessThan(0.2);
     });
   });
 

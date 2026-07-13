@@ -98,7 +98,8 @@ export const COLLATIONS: Collation[] = [
     k: 155, p: 4.4,
     micro: 24,
     tags: [],
-    ing: [["Dattes dénoyautées", 200, "g", "F", false], ["Flocons d'avoine", 150, "g", "C", false], ["Beurre d'arachide naturel", 100, "g", "N", false], ["Graines de chia", 30, "g", "N", false]],
+    // Quantités divisées : recette-lot d'environ 12 boules (÷12).
+    ing: [["Dattes dénoyautées", 16.7, "g", "F", false], ["Flocons d'avoine", 12.5, "g", "C", false], ["Beurre d'arachide naturel", 8.3, "g", "N", false], ["Graines de chia", 2.5, "g", "N", false]],
   },
   {
     id: "coll-muffins-banane-avoine-maison", nom: "Muffins banane-avoine maison",
@@ -106,7 +107,10 @@ export const COLLATIONS: Collation[] = [
     k: 189, p: 5.0,
     micro: 24,
     tags: [],
-    ing: [["Banane", 3, "unite", "F", true], ["Flocons d'avoine", 150, "g", "C", false], ["Farine de blé entier", 150, "g", "C", false], ["Oeuf", 2, "unite", "P", true], ["Sirop d'érable", 80, "ml", "E", false], ["Huile de canola", 50, "ml", "N", false], ["Lait 2 %", 125, "ml", "D", false]],
+    // Quantités divisées : recette-lot d'environ 12 muffins (÷12). Banane et
+    // oeuf sont des ingrédients incorporés à la pâte (pas des unités entières
+    // servies telles quelles), donc non indivisibles ici.
+    ing: [["Banane", 0.25, "unite", "F", false], ["Flocons d'avoine", 12.5, "g", "C", false], ["Farine de blé entier", 12.5, "g", "C", false], ["Oeuf", 0.17, "unite", "P", false], ["Sirop d'érable", 6.7, "ml", "E", false], ["Huile de canola", 4.2, "ml", "N", false], ["Lait 2 %", 10.4, "ml", "D", false]],
   },
   {
     id: "coll-craquelins-et-cheddar", nom: "Craquelins et cheddar",
@@ -130,7 +134,10 @@ export const COLLATIONS: Collation[] = [
     k: 166, p: 13.6,
     micro: 44,
     tags: [],
-    ing: [["Yogourt grec nature 2 %", 400, "g", "D", false], ["Concombre", 200, "g", "L", false], ["Ail", 5, "g", "L", false], ["Citron", 1, "unite", "F", true], ["Pain pita de blé entier", 2, "unite", "C", true]],
+    // Quantités divisées : recette-lot d'environ 4 portions (÷4). Citron et
+    // pita non indivisibles ici (un demi-pita par portion est une mesure
+    // normale, pas une unité arrondie à la hausse).
+    ing: [["Yogourt grec nature 2 %", 100, "g", "D", false], ["Concombre", 50, "g", "L", false], ["Ail", 1.25, "g", "L", false], ["Citron", 0.25, "unite", "F", false], ["Pain pita de blé entier", 0.5, "unite", "C", false]],
   },
   {
     id: "coll-amandes-roties-et-orange", nom: "Amandes rôties et orange",
@@ -170,7 +177,8 @@ export const COLLATIONS: Collation[] = [
     k: 237, p: 7.5,
     micro: 24,
     tags: [],
-    ing: [["Flocons d'avoine", 250, "g", "C", false], ["Miel", 100, "g", "E", false], ["Beurre d'arachide naturel", 120, "g", "N", false], ["Canneberges séchées", 60, "g", "F", false], ["Graines de citrouille", 40, "g", "N", false]],
+    // Quantités divisées : recette-lot d'environ 10 barres (÷10).
+    ing: [["Flocons d'avoine", 25, "g", "C", false], ["Miel", 10, "g", "E", false], ["Beurre d'arachide naturel", 12, "g", "N", false], ["Canneberges séchées", 6, "g", "F", false], ["Graines de citrouille", 4, "g", "N", false]],
   },
   {
     id: "coll-cottage-et-tomates-cerises", nom: "Cottage et tomates cerises",

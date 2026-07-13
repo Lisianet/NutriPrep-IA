@@ -119,10 +119,11 @@ export function genererMenu(
     ];
     let k = repas.reduce((s, m) => s + m.r.k, 0) * portionsRepas;
     let p = repas.reduce((s, m) => s + m.r.p, 0) * portionsRepas;
+    // Le nombre de collations choisi par le profil est toujours respecté (quitte à
+    // dépasser légèrement la cible calorique certains jours) — seul un manque de
+    // collations disponibles dans la banque filtrée peut réduire ce nombre.
     const snacks: Collation[] = [];
     for (let n = 0; n < pr.collations; n++) {
-      const gapK = cibles.kcal - k;
-      if (gapK < 110) break;
       const choix = piocherCollation(snacks);
       if (!choix) break;
       snacks.push(choix);
