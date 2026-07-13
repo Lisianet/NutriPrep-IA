@@ -122,10 +122,10 @@ describe("adaptation aux profils (portions à l'échelle)", () => {
     expect(m.portionsRepas).toBeLessThanOrEqual(1);
   });
 
-  it("le profil démo reste à ×1 (banque calibrée sur ~1650 kcal)", () => {
+  it("le profil démo reste proche de ×1 (banque calibrée sur ~1650 kcal, collations à leur vrai kcal moyen)", () => {
     const m = genererMenu(DEMO, calculerCibles(DEMO), 1);
     if (estErreur(m)) throw new Error(m.erreur);
-    expect(m.portionsRepas).toBe(1);
+    expect(m.portionsRepas).toBe(0.75);
   });
 });
 

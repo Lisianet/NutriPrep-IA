@@ -157,7 +157,11 @@ export function genererMenu(
   const baseJour = (i: number) =>
     idx(dej, PATRONS.dej[i]).k + idx(din, PATRONS.din[i]).k + idx(soup, PATRONS.soup[i]).k;
   const baseMoyenne = [0, 1, 2, 3, 4, 5, 6].reduce((s, i) => s + baseJour(i), 0) / 7;
-  const budgetCollations = pr.collations * 150;
+  // Moyenne réelle des collations de la banque filtrée (pas une estimation figée) :
+  // le nombre de collations demandé étant désormais garanti chaque jour, sous-estimer
+  // leur kcal moyen ferait systématiquement dépasser la cible calorique.
+  const kcalMoyenCollation = colls.length ? colls.reduce((s, c) => s + c.k, 0) / colls.length : 150;
+  const budgetCollations = pr.collations * kcalMoyenCollation;
   const portionsRepas = Math.min(2, Math.max(0.75,
     Math.round(((cibles.kcal - budgetCollations) / baseMoyenne) * 4) / 4));
 
