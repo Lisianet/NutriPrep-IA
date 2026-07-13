@@ -1,30 +1,29 @@
 import type { Allergene, Ingredient, Profil, Regime } from "./types";
-
 /** Mots-clés d'exclusion stricte par allergène (recherche dans le nom d'ingrédient). */
 export const ALLERGENES: Record<Allergene, string[]> = {
   soya: ["soya", "tofu", "edamame", "tempeh", "miso"],
   arachides: ["arachide"],
   sesame: ["tahini", "sésame"],
-  gluten: ["pain", "blé"],
-  lactose: ["yogourt grec", "feta", "cottage", "kéfir", "parmesan"],
-  oeufs: ["œuf"],
+  gluten: ["pain", "blé", "avoine", "orge", "couscous", "tortilla", "pita", "craquelins"],
+  lactose: ["yogourt grec", "yogourt nature", "feta", "cottage", "kéfir", "parmesan", "ricotta", "mozzarella", "cheddar", "lait", "crème sure", "skyr"],
+  oeufs: ["œuf", "oeuf", "mayonnaise"],
+  poisson: ["saumon", "truite", "thon", "tilapia"],
+  fruits_de_mer: ["crevette"],
 };
-
 export const ALLERG_LABELS: Record<Allergene, string> = {
   soya: "Soya", arachides: "Arachides", sesame: "Sésame",
   gluten: "Gluten (blé)", lactose: "Produits laitiers", oeufs: "Œufs",
+  poisson: "Poisson", fruits_de_mer: "Fruits de mer",
 };
-
 interface Filtrable { regimes: Regime[]; ing: Ingredient[]; }
-
 export const compatibleRegime = (r: Filtrable, regime: Regime): boolean =>
-  regime === "vegetalien" ? r.regimes.includes("vegetalien") : true;
-
+  regime === "vegetalien" ? r.regimes.includes("vegetalien")
+  : regime === "vegetarien" ? r.regimes.includes("vegetarien") || r.regimes.includes("vegetalien")
+  : true;
 export const sansAllergenes = (r: Filtrable, allergies: Allergene[]): boolean =>
   !r.ing.some(([nom]) =>
     allergies.some((a) => ALLERGENES[a].some((kw) => nom.toLowerCase().includes(kw)))
   );
-
 /** Filtres durs : régime + allergies. Jamais contournés par l'optimisation. */
 export const filtrer = <T extends Filtrable>(
   liste: T[],

@@ -22,9 +22,9 @@ describe("listeEpicerie", () => {
   });
 
   it("suit le facteur de portions du profil pour les recettes, pas pour les collations", () => {
-    const l = listeEpicerie(menu({ d1: 4, c2: 2 }, 1.5));
+    const l = listeEpicerie(menu({ d1: 4, "coll-yogourt-grec-et-bleuets": 2 }, 1.5));
     expect(l.C?.find((i) => i.nom.includes("avoine"))?.q).toBe(240); // 40 × 4 × 1,5
-    // c2 : yogourt 175 × 2 = 350, PAS ×1,5 ; d1 en ajoute 175 × 4 × 1,5 = 1050 → 1400
+    // coll-yogourt-grec-et-bleuets : yogourt 175 × 2 = 350, PAS ×1,5 ; d1 en ajoute 175 × 4 × 1,5 = 1050 → 1400
     expect(l.D?.find((i) => i.nom.includes("Yogourt grec"))?.q).toBe(1400);
   });
 

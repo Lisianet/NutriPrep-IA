@@ -73,7 +73,10 @@ type Detail = { r: Recette; collation?: false } | { r: Collation; collation: tru
 
 function FicheRecette({ d, portionsDefaut, onClose }: { d: Detail; portionsDefaut: number; onClose: () => void }) {
   const [portions, setPortions] = useState(portionsDefaut);
-  const fmt = (q: number) => fr(q * portions);
+  // v4 : les ingrédients indivisibles (œufs, tortillas, pains, fruits entiers...)
+  // sont arrondis à l'unité entière (minimum 1) plutôt que divisés — jamais 1,25 œuf.
+  const fmt = (q: number, indivisible?: boolean) =>
+    fr(indivisible ? Math.max(1, Math.round(q * portions)) : q * portions);
   const r = d.r;
   const recette = !d.collation ? (r as Recette) : null;
   return (
@@ -102,7 +105,7 @@ function FicheRecette({ d, portionsDefaut, onClose }: { d: Detail; portionsDefau
           <div>
             <strong style={{ fontSize: 13 }}>Ingrédients {portions !== 1 && <span style={{ color: T.sub, fontWeight: 500 }}>(×{fr(portions)})</span>}</strong>
             <ul style={{ margin: "8px 0 0", paddingLeft: 16, fontSize: 13.5, lineHeight: 1.9 }}>
-              {r.ing.map(([nom, q, u]) => <li key={nom}>{fmt(q)} {u} — {nom}</li>)}
+              {r.ing.map(([nom, q, u, , indiv]) => <li key={nom}>{fmt(q, indiv)} {u} — {nom}</li>)}
             </ul>
           </div>
           {recette && (
@@ -202,7 +205,7 @@ function Questionnaire({ pr, setPr, valider }: { pr: Profil; setPr: (p: Profil) 
       </div>) },
     { titre: "Alimentation & logistique", ok: true, contenu: (
       <div style={{ display: "grid", gap: 16 }}>
-        <Champ label="Type d'alimentation"><Radio champ="regime" options={[["vegetarien", "Végétarien"], ["vegetalien", "Végétalien"], ["omnivore", "Omnivore (banque MVP : recettes végé)"]]} /></Champ>
+        <Champ label="Type d'alimentation"><Radio champ="regime" options={[["vegetarien", "Végétarien"], ["vegetalien", "Végétalien"], ["omnivore", "Omnivore"]]} /></Champ>
         <Champ label="Allergies et intolérances (filtre strict)">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {(Object.entries(ALLERG_LABELS) as [Allergene, string][]).map(([k, lab]) => {
@@ -332,15 +335,22 @@ function VueMenu({ menu, cibles, regenerer, ouvrir, recettes }: { menu: MenuGene
   );
 }
 
-/** Prend maintenant "recettes" en prop (chargées depuis Supabase) au lieu de
- *  l'import statique RECETTES. Les collations restent statiques pour l'instant. */
+/** Prend "recettes" en prop (chargées depuis Supabase). Les collations restent
+ *  statiques (data/collations.ts). v4 : n'affiche plus la banque complète —
+ *  seulement les repas ET les collations effectivement utilisés cette semaine. */
 function VueRecettes({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d: Detail) => void; recettes: Recette[] }) {
   const prepDe = jourPrepParRecette(menu, recettes);
   const usage: Record<string, string[]> = {};
   const ABBR = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
   menu.jours.forEach((j, i) => j.repas.forEach((m) => (usage[m.r.id] ??= []).push(ABBR[i])));
   const semaine = Object.keys(usage).map((id) => recettes.find((r) => r.id === id)).filter((r): r is Recette => !!r);
-  const TYPES: [Recette["type"], string][] = [["dej", "Déjeuners"], ["din", "Dîners"], ["soup", "Soupers"]];
+
+  const usageColl: Record<string, string[]> = {};
+  menu.jours.forEach((j, i) => j.snacks.forEach((c) => (usageColl[c.id] ??= []).push(ABBR[i])));
+  const collationsSemaine = Object.keys(usageColl)
+    .map((id) => COLLATIONS.find((c) => c.id === id))
+    .filter((c): c is Collation => !!c);
+
   const Ligne = ({ r, extra }: { r: Recette; extra?: ReactNode }) => (
     <Card pad={14}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
@@ -357,24 +367,26 @@ function VueRecettes({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d:
       {semaine.map((r) => (
         <Ligne key={r.id} r={r} extra={<><PrepBadge b={prepDe[r.id]} /><Etiquette tone="berry">servi {usage[r.id].join(" · ")}</Etiquette></>} />
       ))}
-      <h3 style={{ fontFamily: FONT_D, fontSize: 20, margin: "14px 0 0" }}>Toute la banque ({recettes.length} recettes)</h3>
-      {TYPES.map(([t, titre]) => (
-        <div key={t} style={{ display: "grid", gap: 8 }}>
-          <strong style={{ fontSize: 13, color: T.greenDark, textTransform: "uppercase", letterSpacing: 1 }}>{titre}</strong>
-          {recettes.filter((r) => r.type === t).map((r) => <Ligne key={r.id} r={r} extra={r.regimes.includes("vegetalien") ? <Etiquette tone="green">végétalien ok</Etiquette> : undefined} />)}
+      {collationsSemaine.length > 0 && (
+        <div style={{ display: "grid", gap: 8 }}>
+          <strong style={{ fontSize: 13, color: T.greenDark, textTransform: "uppercase", letterSpacing: 1 }}>
+            Collations cette semaine ({collationsSemaine.length})
+          </strong>
+          {collationsSemaine.map((c) => (
+            <Card key={c.id} pad={14}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 15 }}>
+                  <NomRecette nom={c.nom} gras={false} onClick={() => ouvrir({ r: c, collation: true })} />
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <Etiquette tone="berry">servi {usageColl[c.id].join(" · ")}</Etiquette>
+                  <span style={{ fontSize: 12.5, color: T.sub }}>{c.k} kcal · {c.p} g prot</span>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
-      ))}
-      <div style={{ display: "grid", gap: 8 }}>
-        <strong style={{ fontSize: 13, color: T.greenDark, textTransform: "uppercase", letterSpacing: 1 }}>Collations ({COLLATIONS.length})</strong>
-        {COLLATIONS.map((c) => (
-          <Card key={c.id} pad={14}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 15 }}><NomRecette nom={c.nom} gras={false} onClick={() => ouvrir({ r: c, collation: true })} /></div>
-              <span style={{ fontSize: 12.5, color: T.sub }}>{c.k} kcal · {c.p} g prot</span>
-            </div>
-          </Card>
-        ))}
-      </div>
+      )}
     </div>
   );
 }
@@ -418,7 +430,7 @@ function VuePrep({ menu, ouvrir, recettes }: { menu: MenuGenere; ouvrir: (d: Det
 function VueEpicerie({ menu, recettes }: { menu: MenuGenere; recettes: Recette[] }) {
   const [coches, setCoches] = useState<Record<string, boolean>>({});
   const parCat = listeEpicerie(menu, recettes, COLLATIONS);
-  const ordre: Cat[] = ["F", "L", "P", "G", "C", "N", "D", "S", "E"];
+  const ordre: Cat[] = ["F", "L", "P", "G", "C", "N", "D", "V", "S", "E"];
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <p style={{ fontSize: 13.5, color: T.sub, margin: 0 }}>

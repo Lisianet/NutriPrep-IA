@@ -21,7 +21,12 @@ describe("filtrage", () => {
 
   it("le filtre lactose exclut yogourt, feta, kéfir, cottage et parmesan", () => {
     const colls = filtrer(COLLATIONS, { regime: "vegetarien", allergies: ["lactose"] });
-    expect(colls.map((c) => c.id).sort()).toEqual(["c4", "c5", "c6", "c7", "c8"]);
+    const ids = colls.map((c) => c.id);
+    ["coll-yogourt-grec-et-bleuets", "coll-fromage-cottage-et-ananas", "coll-smoothie-kefir-et-fruits-rouges", "coll-craquelins-et-cheddar", "coll-ma-s-souffle-au-parmesan"].forEach((id) =>
+      expect(ids).not.toContain(id)
+    );
+    // le beurre d'arachide/d'amande n'est pas laitier : ces collations doivent rester incluses
+    expect(ids).toContain("coll-pomme-et-beurre-darachide");
   });
 
   it("sansAllergenes est insensible à la casse", () => {

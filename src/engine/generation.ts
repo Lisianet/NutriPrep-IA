@@ -22,27 +22,38 @@ export function melanger<T>(arr: T[], rand: () => number): T[] {
   return a;
 }
 
-/**
- * Squelette hebdomadaire (index de recette par jour, lun → dim), aligné sur
- * les trois blocs de préparation :
- *   slot 0 → servi en début de semaine  → cuisiné le DIMANCHE
- *   slot 1 → servi mer/jeu → dim        → cuisiné le MERCREDI soir
- *   slot 2 → servi sam/dim              → cuisiné FRAIS en fin de semaine
- * Aucune recette n'est donc servie avant son jour de préparation.
- */
+/** Ordonne aléatoirement en favorisant les éléments à poids plus élevé
+ *  (Efraimidis–Spirakis) : une recette bien notée a plus de chances d'arriver
+ *  tôt dans la liste, sans jamais être un choix garanti — préserve la variété
+ *  d'une semaine à l'autre pour un même profil. */
+function melangerPondere<T>(arr: T[], rand: () => number, poids: (t: T) => number): T[] {
+  return arr
+    .map((t) => ({ t, cle: Math.pow(rand(), 1 / Math.max(poids(t), 0.01)) }))
+    .sort((a, b) => b.cle - a.cle)
+    .map((x) => x.t);
+}
+
+/** Score une recette selon sa densité en protéines et en fibres (par kcal)
+ *  comparée à la densité visée par les cibles du profil. > 1 = plus dense que
+ *  la cible, ce qui aide à combler les besoins sans se fier au seul facteur
+ *  d'échelle des portions. */
+function scoreRecette(r: Recette, cibles: Cibles): number {
+  if (!r.k) return 1;
+  const densProt = r.p / r.k;
+  const densFibres = r.fb / r.k;
+  const cibleDensProt = cibles.prot / cibles.kcal;
+  const cibleDensFibres = cibles.fibres / cibles.kcal;
+  return 0.5 * (densProt / cibleDensProt) + 0.5 * (densFibres / cibleDensFibres);
+}
+
 const PATRONS: Record<TypeRepas, number[]> = {
   dej: [0, 0, 0, 1, 1, 1, 1],
   din: [0, 0, 0, 1, 1, 2, 2],
   soup: [0, 0, 1, 1, 1, 2, 2],
 };
 
-/** Priorité d'affectation aux slots : les plus « meal prep » d'abord. */
 const RANG_MOMENT: Record<MomentPrep, number> = { dimanche: 0, misemaine: 1, frais: 2 };
 
-/**
- * Menu 7 jours : filtres durs → squelette en lots (2 déj / 3 dîners / 3 soupers)
- * → collations choisies pour combler l'écart calories-protéines.
- */
 export function genererMenu(
   pr: Profil,
   cibles: Cibles,
@@ -54,12 +65,8 @@ export function genererMenu(
   const pool = filtrer(recettes, pr);
   const colls = filtrer(collations, pr);
 
-  /** n recettes du type t. Les slots servis en début de période exigent des
-   *  recettes préparables à l'avance ; les recettes « fraîches » ne sont
-   *  utilisées que pour le dernier slot des soupers (cuisine du vendredi),
-   *  ou en dépannage si la banque filtrée est trop petite. */
   const choisir = (t: TypeRepas, n: number): Recette[] => {
-    const cand = melanger(pool.filter((r) => r.type === t), rand);
+    const cand = melangerPondere(pool.filter((r) => r.type === t), rand, (r) => scoreRecette(r, cibles));
     const nonFrais = cand.filter((r) => r.moment !== "frais");
     const frais = cand.filter((r) => r.moment === "frais");
     const nbPreparables = t === "soup" ? n - 1 : n;
@@ -80,17 +87,29 @@ export function genererMenu(
 
   const idx = <T,>(arr: T[], i: number) => arr[Math.min(i, arr.length - 1)];
 
-  /* --- Adaptation aux besoins : portions des repas mises à l'échelle ---
-     La banque est calibrée ~1 330 kcal / jour en repas (à ×1) + collations.
-     Un profil « prise de masse » à 3 000 kcal recevra ×2 ; une petite
-     personne en perte, ×0,75. Quantifié au quart de portion pour rester
-     cuisinable, borné [0,75 ; 2]. */
   const baseJour = (i: number) =>
     idx(dej, PATRONS.dej[i]).k + idx(din, PATRONS.din[i]).k + idx(soup, PATRONS.soup[i]).k;
   const baseMoyenne = [0, 1, 2, 3, 4, 5, 6].reduce((s, i) => s + baseJour(i), 0) / 7;
   const budgetCollations = pr.collations * 150;
   const portionsRepas = Math.min(2, Math.max(0.75,
     Math.round(((cibles.kcal - budgetCollations) / baseMoyenne) * 4) / 4));
+
+  // --- Rotation des collations SUR TOUTE LA SEMAINE, pas seulement par jour ---
+  // On mélange une seule fois la banque filtrée en un « paquet » qu'on consomme
+  // au fur et à mesure ; une collation ne revient qu'une fois le paquet épuisé
+  // (donc jamais deux fois tant qu'il reste une collation non servie cette semaine).
+  let paquetCollations = melanger(colls, rand);
+
+  const piocherCollation = (exclureCetteJournee: Collation[]): Collation | null => {
+    if (paquetCollations.length === 0) {
+      if (colls.length === 0) return null;
+      paquetCollations = melanger(colls, rand); // le paquet est épuisé : on rebrasse
+    }
+    // On évite aussi les doublons à l'intérieur d'une même journée
+    const dispoIdx = paquetCollations.findIndex((c) => !exclureCetteJournee.includes(c));
+    if (dispoIdx === -1) return null;
+    return paquetCollations.splice(dispoIdx, 1)[0];
+  };
 
   const jours: JourMenu[] = JOURS.map((jour, i) => {
     const repas = [
@@ -101,19 +120,10 @@ export function genererMenu(
     let k = repas.reduce((s, m) => s + m.r.k, 0) * portionsRepas;
     let p = repas.reduce((s, m) => s + m.r.p, 0) * portionsRepas;
     const snacks: Collation[] = [];
-    const dispo = melanger(colls, rand);
     for (let n = 0; n < pr.collations; n++) {
       const gapK = cibles.kcal - k;
-      const gapP = cibles.prot - p;
       if (gapK < 110) break;
-      const reste = pr.collations - n;
-      const choix = dispo
-        .filter((c) => !snacks.includes(c))
-        .sort((a, b) => {
-          const score = (c: Collation) =>
-            (gapP > 12 ? c.p * 3 : 0) - Math.abs(gapK / reste - c.k) / 10;
-          return score(b) - score(a);
-        })[0];
+      const choix = piocherCollation(snacks);
       if (!choix) break;
       snacks.push(choix);
       k += choix.k;

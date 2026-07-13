@@ -119,3 +119,23 @@ describe("adaptation aux profils (portions à l'échelle)", () => {
     expect(m.portionsRepas).toBe(1);
   });
 });
+
+describe("sélection influencée par les macros (protéines/fibres)", () => {
+  it("choisit en moyenne des recettes plus denses en protéines et en fibres que l'ensemble de la banque filtrée", () => {
+    const cibles = calculerCibles(DEMO);
+    const dens = (r: { p: number; fb: number; k: number }) => ({ prot: r.p / r.k, fibres: r.fb / r.k });
+
+    const bancPool = RECETTES.filter((r) => r.regimes.includes(DEMO.regime));
+    const moyBanque = bancPool.reduce((s, r) => s + dens(r).prot + dens(r).fibres, 0) / bancPool.length;
+
+    const choisies: typeof RECETTES = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      const m = genererMenu(DEMO, cibles, seed);
+      if (estErreur(m)) throw new Error(m.erreur);
+      m.jours.forEach((j) => j.repas.forEach((rj) => choisies.push(rj.r)));
+    }
+    const moyChoisies = choisies.reduce((s, r) => s + dens(r).prot + dens(r).fibres, 0) / choisies.length;
+
+    expect(moyChoisies).toBeGreaterThan(moyBanque);
+  });
+});
