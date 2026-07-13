@@ -12,12 +12,18 @@ import type { Recette, Cat, MomentPrep, TypeRepas } from "../engine/types";
  *
  *  v4 : ajoute le drapeau "indivisible" par ingrédient (pour l'arrondi des
  *  portions dans FicheRecette) et les micronutriments par portion, exposés
- *  en usage interne seulement — jamais affichés dans l'interface. */
+ *  en usage interne seulement — jamais affichés dans l'interface.
+ *
+ *  Important : recipe_ingredients.quantite est saisie pour la recette
+ *  ENTIÈRE (le lot complet, ex. 4 bananes pour un smoothie qui donne
+ *  4 portions), pas pour une seule portion. On divise donc chaque quantité
+ *  par nb_portions pour obtenir la quantité par portion attendue par le
+ *  moteur (cf. le commentaire du type Ingredient). */
 export async function chargerRecettes(): Promise<Recette[]> {
   const { data, error } = await supabase
     .from("recipes")
     .select(`
-      id, nom, type_repas, regimes_compatibles,
+      id, nom, type_repas, regimes_compatibles, nb_portions,
       temps_prep_min, temps_cuisson_min, conservation_frigo_jours, congelable,
       moment_prep, etapes, tags,
       kcal_portion, prot_portion, gluc_portion, lip_portion, fibres_portion, score_microbiote,
@@ -27,7 +33,9 @@ export async function chargerRecettes(): Promise<Recette[]> {
     `);
   if (error) throw new Error(`Impossible de charger les recettes depuis Supabase : ${error.message}`);
   if (!data) return [];
-  return data.map((r): Recette => ({
+  return data.map((r): Recette => {
+    const nbPortions = Number(r.nb_portions ?? 1) || 1;
+    return {
     id: String(r.id),
     nom: r.nom,
     type: r.type_repas as TypeRepas,
@@ -46,7 +54,7 @@ export async function chargerRecettes(): Promise<Recette[]> {
     tags: (r.tags as string[]) ?? [],
     ing: (r.recipe_ingredients as any[]).map((ri) => [
       ri.ingredients.nom_fr,
-      Number(ri.quantite),
+      Number(ri.quantite) / nbPortions,
       ri.unite,
       ri.ingredients.categorie as Cat,
       Boolean(ri.ingredients.indivisible),
@@ -61,5 +69,6 @@ export async function chargerRecettes(): Promise<Recette[]> {
       potassium_mg: Number(r.potassium_mg_portion ?? 0),
       omega3_g: Number(r.omega3_g_portion ?? 0),
     },
-  }));
+  };
+  });
 }
